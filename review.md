@@ -15,6 +15,7 @@
 - [`retrieve` : les passages les plus proches](#retrieve)
 - [`retrieve` dans `build_context`](#build-context-retrieve)
 - [L'affichage de la réponse et des passages](#affichage)
+- [`rag_object = Rag(vector_db_path=vector_db_path)`](#rag-object)
 
 <a id="read-file"></a>
 
@@ -233,3 +234,13 @@ Les lignes 52 à 59 de `rag.py` affichent la réponse du modèle, puis les trois
 `rag_response` est le texte renvoyé par Groq. `print("-"*20)` écrit une ligne de 20 tirets pour séparer cette réponse de la suite.
 
 `documents` et `metadatas` ont le même nombre d'éléments, dans le même ordre : le texte n° 0 va avec les métadonnées n° 0. La boucle parcourt les indices `0`, `1` et `2`. Pour chacun, elle affiche le numéro, le texte du passage, puis chaque entrée du dictionnaire de métadonnées. `items()` donne les paires de ce dictionnaire, ici `source` et `category`. Une ligne `---` ferme le passage avant le suivant.
+
+<a id="rag-object"></a>
+
+## `rag_object = Rag(vector_db_path=vector_db_path)`
+
+Cette ligne fabrique un objet `Rag` et le range dans la variable `rag_object`.
+
+`Rag(...)` appelle le constructeur `__init__`. Le texte entre parenthèses est l'argument qu'on lui donne. Les deux `vector_db_path` ne jouent pas le même rôle. À gauche du `=`, c'est le nom du paramètre attendu par `__init__`. À droite, c'est la variable de la ligne du dessus, donc le texte `"my_vector_db"`.
+
+Dans `__init__`, ce texte est passé à `VectorDB`, qui ouvre le dossier de la base. `super().__init__()` crée aussi `self.client`, le client Groq. L'objet obtenu a donc les deux pièces nécessaires. Il est gardé dans `rag_object` pour pouvoir appeler `rag_object.ask_rag(...)` juste après.

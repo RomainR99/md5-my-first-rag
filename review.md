@@ -14,6 +14,7 @@
 - [D'où vient le découpage de `chuncks`](#chuncks-csv)
 - [`retrieve` : les passages les plus proches](#retrieve)
 - [`retrieve` dans `build_context`](#build-context-retrieve)
+- [L'affichage de la réponse et des passages](#affichage)
 
 <a id="read-file"></a>
 
@@ -222,3 +223,13 @@ Seule `documents` sert dans cette fonction. `"\n\t".join(documents)` recolle les
 Python ne connaît pas ce nom. Il exécute la fonction parce que `self.vector_db_object` est un objet `VectorDB`, et que cette classe contient `def retrieve(self, question, n=3)`. L'appel `self.vector_db_object.retrieve(question)` veut dire : prends cet objet et lance sa méthode `retrieve`.
 
 À l'intérieur, ce sont d'autres appels qui font le travail : `get_embeddings`, écrit dans le même fichier, et `collection.query`, qui vient de ChromaDB.
+
+<a id="affichage"></a>
+
+## L'affichage de la réponse et des passages
+
+Les lignes 52 à 59 de `rag.py` affichent la réponse du modèle, puis les trois passages qui ont servi à la produire. Elles ne tournent que lorsque le fichier est lancé avec `python rag.py`.
+
+`rag_response` est le texte renvoyé par Groq. `print("-"*20)` écrit une ligne de 20 tirets pour séparer cette réponse de la suite.
+
+`documents` et `metadatas` ont le même nombre d'éléments, dans le même ordre : le texte n° 0 va avec les métadonnées n° 0. La boucle parcourt les indices `0`, `1` et `2`. Pour chacun, elle affiche le numéro, le texte du passage, puis chaque entrée du dictionnaire de métadonnées. `items()` donne les paires de ce dictionnaire, ici `source` et `category`. Une ligne `---` ferme le passage avant le suivant.

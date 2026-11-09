@@ -13,6 +13,7 @@
 - [`collection.metadata.keys()`](#metadata-keys)
 - [D'où vient le découpage de `chuncks`](#chuncks-csv)
 - [`retrieve` : les passages les plus proches](#retrieve)
+- [`retrieve` dans `build_context`](#build-context-retrieve)
 
 <a id="read-file"></a>
 
@@ -203,3 +204,21 @@ Ces deux listes sont ce que `build_context` récupère dans `rag.py`. Les textes
 `get_embeddings` n'écrit nulle part « je veux une liste ». Son paramètre s'appelle seulement `chuncks`, et il le passe tel quel à `encode`. On le voit aux deux endroits qui l'appellent. À la création, l'argument est `list(corpus_df["text"].values)` : la colonne `text` transformée en liste de phrases. Dans `retrieve`, la question est mise entre crochets, `[question]`. Si une chaîne seule suffisait, ce crochet serait inutile. Il force une liste d'un seul texte, pour que `encode` renvoie un lot d'un vecteur, puis `tolist()` une liste de listes. C'est cette forme que `query` attend dans `query_embeddings`.
 
 `get_collection("rag_knowledge")` ne remplit rien. `get_collection` demande à Chroma une collection qui existe déjà sous ce nom. Le remplissage a eu lieu plus tôt, dans `create_vector_db` : `get_or_create_collection(name="rag_knowledge", ...)` crée cette collection, puis `collection.add(...)` y écrit les textes et les vecteurs dans le dossier ouvert par `PersistentClient`. `retrieve` réutilise le même client, `self.chroma_vector_db`, et redemande la collection du même nom. Les documents sont ceux déjà enregistrés sur le disque.
+
+<a id="build-context-retrieve"></a>
+
+## `retrieve` dans `build_context`
+
+À la ligne 14 de `rag.py`, `retrieve` cherche dans la base les passages proches de `question`, puis `build_context` les colle dans le prompt.
+
+`self.vector_db_object` est le `VectorDB` créé dans `__init__` avec le dossier `my_vector_db`. L'appel ne passe que la question. Le paramètre `n` de `retrieve` garde donc sa valeur par défaut, 3 : trois textes, trois métadonnées.
+
+`retrieve` renvoie deux listes, dans cet ordre : les textes, puis leurs métadonnées. L'affectation `documents, metadatas = ...` range la première dans `documents` et la seconde dans `metadatas`.
+
+Seule `documents` sert dans cette fonction. `"\n\t".join(documents)` recolle les trois phrases, séparées par un saut de ligne et une tabulation, et ce bloc remplace `{{CHUNKS}}` dans le fichier de prompt. `metadatas` n'est pas lue ici. Elle est renvoyée avec le prompt et les textes, pour que `ask_rag` puisse les afficher ensuite.
+
+`retrieve` n'est pas une fonction native de Python. C'est une méthode écrite dans ce projet, sur la classe `VectorDB`, dans `vector_db.py`.
+
+Python ne connaît pas ce nom. Il exécute la fonction parce que `self.vector_db_object` est un objet `VectorDB`, et que cette classe contient `def retrieve(self, question, n=3)`. L'appel `self.vector_db_object.retrieve(question)` veut dire : prends cet objet et lance sa méthode `retrieve`.
+
+À l'intérieur, ce sont d'autres appels qui font le travail : `get_embeddings`, écrit dans le même fichier, et `collection.query`, qui vient de ChromaDB.

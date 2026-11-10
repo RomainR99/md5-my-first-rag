@@ -16,6 +16,9 @@
 - [`retrieve` dans `build_context`](#build-context-retrieve)
 - [L'affichage de la réponse et des passages](#affichage)
 - [`rag_object = Rag(vector_db_path=vector_db_path)`](#rag-object)
+- [`normalize_embeddings=True`](#normalize-embeddings)
+- [Un `chunck` n'est pas 500 tokens](#chunck-taille)
+- [L'embedding de la question et les 512 nombres](#embedding-question)
 
 <a id="read-file"></a>
 
@@ -244,3 +247,43 @@ Cette ligne fabrique un objet `Rag` et le range dans la variable `rag_object`.
 `Rag(...)` appelle le constructeur `__init__`. Le texte entre parenthèses est l'argument qu'on lui donne. Les deux `vector_db_path` ne jouent pas le même rôle. À gauche du `=`, c'est le nom du paramètre attendu par `__init__`. À droite, c'est la variable de la ligne du dessus, donc le texte `"my_vector_db"`.
 
 Dans `__init__`, ce texte est passé à `VectorDB`, qui ouvre le dossier de la base. `super().__init__()` crée aussi `self.client`, le client Groq. L'objet obtenu a donc les deux pièces nécessaires. Il est gardé dans `rag_object` pour pouvoir appeler `rag_object.ask_rag(...)` juste après.
+
+<a id="normalize-embeddings"></a>
+
+## `normalize_embeddings=True`
+
+`normalize_embeddings=True` ramène chaque vecteur à une longueur de 1. La comparaison porte alors sur la direction du vecteur, pas sur sa taille.
+
+`encode` produit 512 nombres. Sans normalisation, un texte plus long peut donner un vecteur plus grand. Deux phrases proches par le sens, mais de longueurs différentes, peuvent alors paraître éloignées simplement à cause de cette taille.
+
+Avec `True`, chaque vecteur est divisé par sa longueur. Deux vecteurs de longueur 1 : leur proximité mesure l'angle entre eux, c'est-à-dire la similarité de sens. Les textes du CSV et la question passent tous les deux par `get_embeddings`, donc ils sont normalisés de la même façon avant que Chroma ne cherche les plus proches.
+
+<a id="chunck-taille"></a>
+
+## Un `chunck` n'est pas 500 tokens
+
+Ici, un `chunck` n'est pas un bloc de 500 tokens. C'est une ligne de la colonne `text` du CSV, déjà écrite comme une phrase.
+
+Le fichier contient 200 lignes. La plus courte fait 7 mots, la plus longue 22, soit au plus 117 caractères. Ça représente quelques dizaines de tokens, pas 500.
+
+`chuncks` dans `get_embeddings` est simplement la liste de ces 200 phrases. Le code ne coupe aucun texte et ne compte aucun token. Une découpe à 500 tokens est une méthode courante dans d'autres projets RAG, quand on part d'un long document. Elle n'est pas utilisée ici.
+
+<a id="embedding-question"></a>
+
+## L'embedding de la question et les 512 nombres
+
+La question reste une phrase jusqu'à `retrieve`. C'est là qu'elle devient un vecteur, avec le même modèle que les lignes du CSV.
+
+Dans `rag.py`, le texte « Quelle est la couleur et le nom du chat de Bob ? » est passé à `ask_rag`, puis à `build_context`, puis à `VectorDB.retrieve`. Aucune de ces étapes ne calcule encore de vecteur : elles se transmettent la phrase.
+
+Dans `retrieve`, la phrase est mise seule dans une liste, `[question]`, et cette liste est donnée à `get_embeddings`. Cette méthode appelle `encode` sur `self.sentence_transformers_object`. Cet objet est le modèle `distiluse-base-multilingual-cased-v2`, rechargé au démarrage depuis la métadonnée `embedding_model` de la collection.
+
+`encode` transforme la phrase en 512 nombres, puis `normalize_embeddings=True` ramène ce vecteur à une longueur de 1. `tolist()` le convertit en liste Python. Comme la liste d'entrée ne contenait qu'une phrase, le résultat est une liste qui contient un seul vecteur.
+
+Ce vecteur est ensuite passé à `collection.query`. Chroma le compare aux vecteurs déjà stockés et renvoie les trois passages les plus proches. Le modèle Groq ne voit jamais ce vecteur : il ne reçoit que le texte de ces trois passages.
+
+512 n'est pas un réglage de ce projet. C'est la taille de sortie du modèle `distiluse-base-multilingual-cased-v2`.
+
+Chaque phrase doit devenir un vecteur de la même longueur, sinon Chroma ne peut pas comparer la question aux lignes du CSV. Les auteurs du modèle ont fixé cette longueur à 512 au moment de l'entraînement. `encode` renvoie donc toujours 512 nombres, que la phrase fasse 7 mots ou 22.
+
+Ce nombre vient du Universal Sentence Encoder, dont ce modèle est une version distillée. L'encodeur d'origine produit des vecteurs de 512. Le réseau chargé ici, le module `2_Dense` téléchargé au premier lancement, compresse la représentation interne du texte jusqu'à cette taille. 512 est un compromis choisi par eux : assez grand pour distinguer les sens, assez petit pour stocker et comparer les vecteurs rapidement. Une autre taille demanderait un autre modèle déjà entraîné.

@@ -19,6 +19,9 @@
 - [`normalize_embeddings=True`](#normalize-embeddings)
 - [Un `chunck` n'est pas 500 tokens](#chunck-taille)
 - [L'embedding de la question et les 512 nombres](#embedding-question)
+- [Vérifier que le modèle d'embedding est le même](#meme-modele)
+- [`corpus_df` n'est pas les vecteurs](#corpus-df)
+- [Pourquoi `pandas` transforme le CSV](#pandas-csv)
 
 <a id="read-file"></a>
 
@@ -287,3 +290,37 @@ Ce vecteur est ensuite passé à `collection.query`. Chroma le compare aux vecte
 Chaque phrase doit devenir un vecteur de la même longueur, sinon Chroma ne peut pas comparer la question aux lignes du CSV. Les auteurs du modèle ont fixé cette longueur à 512 au moment de l'entraînement. `encode` renvoie donc toujours 512 nombres, que la phrase fasse 7 mots ou 22.
 
 Ce nombre vient du Universal Sentence Encoder, dont ce modèle est une version distillée. L'encodeur d'origine produit des vecteurs de 512. Le réseau chargé ici, le module `2_Dense` téléchargé au premier lancement, compresse la représentation interne du texte jusqu'à cette taille. 512 est un compromis choisi par eux : assez grand pour distinguer les sens, assez petit pour stocker et comparer les vecteurs rapidement. Une autre taille demanderait un autre modèle déjà entraîné.
+
+<a id="meme-modele"></a>
+
+## Vérifier que le modèle d'embedding est le même
+
+Le commentaire dans `load_vector_db` décrit une vérification qui n'est pas faite. Le `if` actuel ne regarde que si la clé `embedding_model` existe. Si elle existe, il charge le nom stocké dans la base, même quand `EMBEDDING_MODEL` dans `config.py` a changé. Le `else` ne traite que l'absence de cette clé.
+
+Il faut trois cas, avant de créer le `SentenceTransformer` :
+
+- La clé est absente : lever une exception. Sans ce nom, on ne sait pas quel modèle a produit les vecteurs déjà enregistrés.
+- La clé est présente et égale à `EMBEDDING_MODEL` : charger ce modèle. C'est le cas normal.
+- La clé est présente mais différente : lever une autre exception, qui cite les deux noms. Les vecteurs du dossier ont été calculés avec l'ancien modèle. Charger le nouveau produirait des vecteurs de question qui ne se comparent pas à ceux du CSV.
+
+Recréer la base ne peut pas se faire dans ce `else`. `load_vector_db` n'a pas le corpus, seulement le chemin du dossier. La reconstruction a besoin du CSV et de `create_vector_db`. L'endroit pour décider est `__init__` : si les deux noms diffèrent et que `corpus_df` contient des lignes, alors supprimer le dossier et appeler `create_vector_db`. Sans corpus, s'arrêter avec le message suffit. Effacer `my_vector_db` automatiquement depuis `load_vector_db` supprimerait la base sans pouvoir la reconstruire.
+
+<a id="corpus-df"></a>
+
+## `corpus_df` n'est pas les vecteurs
+
+`corpus_df` est le tableau des textes, pas les vecteurs.
+
+La ligne `corpus_df = pandas.read_csv("05_corpus_rag.csv")` charge le fichier CSV dans un tableau pandas. Chaque ligne a quatre colonnes : `id`, `text`, `source` et `categorie`. La colonne `text` contient la phrase, par exemple « Le chat bleu de Bob s'appelle Henri. »
+
+Les vecteurs sont calculés ensuite. `create_vector_db` prend cette colonne `text`, la passe à `get_embeddings`, et c'est `encode` qui produit les 512 nombres. Ces nombres sont enregistrés dans Chroma. Ils ne sont pas dans `corpus_df`.
+
+<a id="pandas-csv"></a>
+
+## Pourquoi `pandas` transforme le CSV
+
+`pandas` sert à lire le fichier CSV et à le ranger dans un tableau nommé `corpus_df`. Le CSV sur le disque n'est qu'un texte avec des virgules. `encode` et Chroma ne savent pas lire ce fichier : ils attendent des listes séparées.
+
+Une fois le fichier chargé, le code peut prendre une colonne par son nom. `corpus_df["text"]` donne les phrases à vectoriser. `corpus_df["id"]` donne les identifiants. Chaque ligne fournit aussi `source` et `categorie` pour les métadonnées. `corpus_df.empty` dit s'il reste des lignes avant de créer la base.
+
+Sans ce tableau, il faudrait découper chaque ligne du fichier à la main en respectant les guillemets et les virgules, puis reconstituer ces quatre listes. `pandas` fait ce découpage. Les vecteurs, eux, ne sont pas dans ce tableau : ils sont calculés ensuite à partir de la colonne `text`.

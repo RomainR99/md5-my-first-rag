@@ -3,8 +3,17 @@ from config import LLM_MODEL
 
 from vector_db import VectorDB
 
+#on cré une class agent car il y a des methodes qui sont communes à tous les agents , 
+# il faut un agent pour découper la question du user
+
 class Rag(Agent):
 	def __init__(self, vector_db_path):
+		#Rag hérite de Agent, constructeur de la class mere est donc Agent c'est pour ca que il y a rien dans ()
+			#car on a pas mis d'argument au dessus dans() (Agent, argument ) , on a juste mis vector_db_path
+
+		#agent.py, ce constructeur est défini par def __init__(self) : il ne prend aucun argument en plus de l'objet.
+
+
 		super().__init__()
 		self.vector_db_object = VectorDB(vector_db_path=vector_db_path)
 

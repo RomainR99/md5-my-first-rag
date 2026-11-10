@@ -7,6 +7,7 @@ import pandas
 
 class VectorDB:
 	def __init__(self, vector_db_path="", corpus_df=None):
+		print(corpus_df)#pour voir ce qu'il y a dans l'objet , si None on rentre dans le if
 		if os.path.exists(vector_db_path):
 			self.load_vector_db(vector_db_path)
 
@@ -14,6 +15,12 @@ class VectorDB:
 		elif not corpus_df.empty:
 			self.create_vector_db(vector_db_path, corpus_df)
 
+		else:
+			raise(Exception("Error :Can't create or load the vector database"))
+			#cette partie est pour voir si on a le nom du model d'embedding dans la base de données , si oui on charge le model , sinon on raise une exception
+			#if "embedding_model" in collection.metadata.keys():
+			#self.sentence_transformers_object = SentenceTransformer(collection.metadata["embedding_model"])
+		#else:
 
 	def load_vector_db(self, vector_db_path):
 		print("Loading Vector DB")
@@ -22,8 +29,14 @@ class VectorDB:
 
 		if "embedding_model" in collection.metadata.keys():
 			self.sentence_transformers_object = SentenceTransformer(collection.metadata["embedding_model"])
+
+			#il faut aussi s'assurer que le model d'embedding est le meme que celui qui est dans la base de données
+			#  et donc recré la base vectorielle si on a pas le bon embedding model
 		else:
 			raise(Exception("Error : we miss the embeddings model's name information"))
+			#si on a produit nous meme le model d'embedding ,on est sur d'avoir le bon model d'embedding 
+			#c'est parceque un ami nous à envoyé la base vectoriel , on vérifie qu'on a le nom 
+				# du model d'embedding dans la base de données
 
 	
 	def create_vector_db(self, vector_db_path, corpus_df):
@@ -32,6 +45,8 @@ class VectorDB:
 
 		self.chroma_vector_db = chromadb.PersistentClient(path=vector_db_path)
 
+		#"embedding_model": EMBEDDING_MODEL pour etre sur d'avoir le meme embedding pour la question
+		#  et la reponse qui prend le meme calcul pour la faire la bdd vectorielle
 		collection = self.chroma_vector_db.get_or_create_collection(
 			name="rag_knowledge",
 			metadata={
@@ -47,7 +62,7 @@ class VectorDB:
 			ids = list(corpus_df["id"].values),
 			documents=chuncks,
 			embeddings=embeddings,
-			metadatas=[{"source": row["source"] , "category": row["categorie"]} for _, row in corpus_df.iterrows()]
+			metadatas=[{"source": row["source"] , "category": row["categorie"],"index_chunk": row["id"]} for _, row in corpus_df.iterrows()]
 			)
 
 
